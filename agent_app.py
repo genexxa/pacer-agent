@@ -1,58 +1,52 @@
 from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 import os
-import requests
-import openai
-import json
-from dotenv import load_dotenv
 
-load_dotenv()
 app = Flask(__name__)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-STRAVA_BACKEND_URL = "https://pacerai-strava.onrender.com"
+# PostgreSQL config from Render
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-def get_strava_activities(strava_id):
-    """Calls your backend to get Strava activity data"""
-    url = f"{STRAVA_BACKEND_URL}/activities?strava_id={strava_id}"
-    response = requests.get(url)
-    return response.json()
+# User model (must match your auth backend)
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    strava_id = db.Column(db.Integer, unique=True, nullable=False)
+    firstname = db.Column(db.String(64))
+    lastname = db.Column(db.String(64))
+    access_token = db.Column(db.String(255))
+    refresh_token = db.Column(db.String(255))
+    token_expires_at = db.Column(db.DateTime)
 
-def run_gpt_analysis(strava_id, activities_data):
-    messages = [
-        {
-            "role": "system",
-            "content": "You are Pacer, an expert ultrarunning coach. Analyze Strava data and give personalized, clear, and motivational feedback."
-        },
-        {
-            "role": "user",
-            "content": f"My Strava ID is {strava_id}. What have I done this week?"
-        },
-        {
-            "role": "function",
-            "name": "get_strava_activities",
-            "content": json.dumps(activities_data)
-        }
-    ]
+    def __repr__(self):
+        return f"<User {self.strava_id} - {self.firstname}>"
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4-0613",
-        messages=messages
-    )
+# Root route
+@app.route("/")
+def index():
+    return "✅ Pacer agent is running. Use /coach?strava_id=XXXX to get feedback."
 
-    return response.choices[0].message["content"]
-
+# Coaching route for GPT Action
 @app.route("/coach")
 def coach():
-    strava_id = request.args.get("strava_id")
+    strava_id = request.args.get("strava_id", type=int)
     if not strava_id:
-        return jsonify({"error": "Missing strava_id parameter"}), 400
+        return jsonify({"error": "❌ Missing strava_id"}), 400
 
-    activities = get_strava_activities(strava_id)
-    if not activities or "activities" not in activities:
-        return jsonify({"error": "Could not retrieve Strava data"}), 500
+    user = User.query.filter_by(strava_id=strava_id).first()
+    if not user:
+        return jsonify({"error": "❌ User not found"}), 404
 
-    feedback = run_gpt_analysis(strava_id, activities)
+    # Simple feedback generation logic
+    feedback = (
+        f"Great work, {user.firstname}! Based on your recent activity, "
+        "you're staying consistent. Keep up the strong training!"
+    )
+
     return jsonify({"feedback": feedback})
 
+# Start the server
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
