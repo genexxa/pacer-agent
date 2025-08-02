@@ -30,23 +30,25 @@ def index():
     return "✅ Pacer Agent is running. Try /coach?strava_id=XXXX"
 
 # Coaching route for GPT integration
-@app.route("/coach")
+@app.route("/coach", methods=["GET"])
 def coach():
-    strava_id = request.args.get("strava_id", type=int)
+    strava_id = request.args.get("strava_id")
     if not strava_id:
-        return jsonify({"error": "❌ Missing strava_id"}), 400
+        return jsonify({"error": "Missing strava_id query parameter"}), 400
 
-    user = User.query.filter_by(strava_id=strava_id).first()
+    user = User.query.filter_by(strava_id=int(strava_id)).first()
     if not user:
-        return jsonify({"error": "❌ User not found"}), 404
+        return jsonify({"error": "User not found"}), 404
 
-    feedback = (
-        f"Great work, {user.firstname}! Based on your recent activity, "
-        "you're staying consistent. Keep up the strong training!"
-    )
+    return jsonify({
+        "feedback": f"Great work, {user.firstname}! Based on your recent activity, you're staying consistent. Keep it up!"
+    })
 
-    return jsonify({"feedback": feedback})
-
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
 # Ensure DB tables exist (executed once at startup)
 with app.app_context():
     db.create_all()
