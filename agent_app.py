@@ -94,7 +94,7 @@ def list_users():
         } for u in users]
     })
 
-@app.route("/coach")
+@app.route("/coach", methods=["GET"])
 def coach():
     strava_id = request.args.get("strava_id")
     if not strava_id:
@@ -104,9 +104,14 @@ def coach():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    return jsonify({
-        "feedback": f"Great job, {user.firstname}! You're staying consistent. Keep pushing your endurance!"
-    })
+    # ✅ Only return a short text feedback here
+    feedback = (
+        f"Hi {user.firstname}, you're doing great! Your training looks consistent. "
+        "Let’s continue to build aerobic endurance and include a longer run this week."
+    )
+
+    return jsonify({"feedback": feedback})
+
 
 @app.route("/activities")
 def activities():
