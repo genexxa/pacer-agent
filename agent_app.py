@@ -52,3 +52,55 @@ if __name__ == "__main__":
 # Ensure DB tables exist (executed once at startup)
 with app.app_context():
     db.create_all()
+
+from datetime import datetime, timedelta
+from flask import jsonify
+
+@app.route("/activities", methods=["GET"])
+def get_recent_activities():
+    strava_id = request.args.get("strava_id")
+    if not strava_id:
+        return jsonify({"error": "Missing strava_id query parameter"}), 400
+
+    user = User.query.filter_by(strava_id=strava_id).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Refresh token if expired
+    if user.token_expires_at < datetime.utcnow():
+        refresh_resp = requests.post("https://www.strava.com/oauth/token", data={
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "grant_type": "refresh_token",
+            "refresh_token": user.refresh_token
+        })
+
+        if refresh_resp.status_code != 200:
+            return jsonify({"error": "Token refresh failed"}), 400
+
+        refresh_data = refresh_resp.json()
+        user.access_token = refresh_data['access_token']
+        user.refresh_token = refresh_data['refresh_token']
+        user.token_expires_at = datetime.utcfromtimestamp(refresh_data['expires_at'])
+        db.session.commit()
+
+    # Call Strava API
+    activities_url = "https://www.strava.com/api/v3/athlete/activities"
+    headers = {"Authorization": f"Bearer {user.access_token}"}
+    resp = requests.get(activities_url, headers=headers, params={"per_page": 5})
+
+    if resp.status_code != 200:
+        return jsonify({"error": "Failed to fetch activities"}), 400
+
+    data = resp.json()
+
+    # Return simplified activity info
+    recent = [{
+        "name": a["name"],
+        "distance_km": round(a["distance"] / 1000, 2),
+        "moving_time_min": round(a["moving_time"] / 60, 1),
+        "type": a["type"],
+        "start_date": a["start_date"]
+    } for a in data]
+
+    return jsonify({"activities": recent})
