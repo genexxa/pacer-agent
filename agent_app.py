@@ -4,6 +4,10 @@ import os
 from datetime import datetime
 import requests
 
+# Load environment variables
+CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
+CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
+
 
 # Initialize Flask app
 app = Flask(__name__)
